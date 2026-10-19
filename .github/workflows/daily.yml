@@ -2,7 +2,7 @@ name: Daily Telegram check-in
 
 on:
   schedule:
-    - cron: '17 9 * * *'
+    - cron: '0 0 * * *'
       timezone: Australia/Melbourne
   workflow_dispatch:
     inputs:

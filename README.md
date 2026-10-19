@@ -1,6 +1,6 @@
 # Telegram daily check-in
 
-Send one fixed text from your **personal Telegram account**, daily at **9:17 AM Australia/Melbourne**, using Telethon and GitHub Actions. No bot, Premium subscription, or always-on Mac. Sending starts disabled. The example recipient `me` means your Saved Messages.
+Send one fixed text from your **personal Telegram account**, daily at **midnight (00:00) Australia/Melbourne**, using Telethon and GitHub Actions. No bot, Premium subscription, or always-on Mac. Sending starts disabled. The example recipient `me` means your Saved Messages.
 
 ## One-time local setup
 
@@ -49,7 +49,7 @@ For a deliberately authorized local send, provide `TELEGRAM_API_ID`, `TELEGRAM_A
 
 ## Timing and failure behavior
 
-The workflow uses GitHub's native `timezone: Australia/Melbourne`, so daylight saving changes require no edits. Change `17 9 * * *` to choose a different local time. A morning time avoids the repeated/skipped hours around DST changes.
+The workflow uses GitHub's native `timezone: Australia/Melbourne`, so daylight saving changes require no edits. Change `0 0 * * *` to choose a different local time. Midnight avoids Melbourne’s repeated/skipped hours around DST changes. GitHub may delay midnight runs during high load; this is a target time, not an exact delivery guarantee.
 
 GitHub schedules are best effort: runs may be delayed or dropped. The workflow must be on the default branch. Public repositories' schedules may be disabled after 60 days without repository activity; a private repository avoids that inactivity rule. Hosted runner usage is subject to your account's Actions quota/billing. This small job normally consumes little time but is not an unconditional free-service guarantee.
 
