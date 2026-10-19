@@ -1,6 +1,6 @@
 # Telegram daily check-in
 
-Send one fixed text from your **personal Telegram account**, daily at **midnight (00:00) Australia/Melbourne**, using Telethon and GitHub Actions. No bot, Premium subscription, or always-on Mac. Sending starts disabled. The example recipient `me` means your Saved Messages.
+Send a configured command to each recipient from your **personal Telegram account**, daily at **midnight (00:00) Australia/Melbourne**, using Telethon and GitHub Actions. No bot, Premium subscription, or always-on Mac. Sending starts disabled. Each recipient has its own message in `config.json`; `me` means your Saved Messages.
 
 ## One-time local setup
 
@@ -24,7 +24,7 @@ The last two commands are offline and send nothing.
 
 Create a private GitHub repository and upload this folder's contents to its root, including `.github/workflows/daily.yml` and `.gitignore`. Do not upload `.venv`, local configuration, or credential files. No credentials are included in this project. Review staged files before any commit.
 
-Edit `config.json` to set the fixed message. Recipients are `me` or public `@usernames`; use only intended chats. Phone numbers and numeric IDs are intentionally unsupported. Usernames can change owners, so keep the list current. Duplicate usernames are collapsed. Maximum: 20 recipients, with a 10-second delay between sends. Messages are plain text with link previews off.
+Edit the `recipients` object in `config.json` to map each username to its message, for example `{"@alice": "/qd", "@bobbb": "/sign"}`. Recipients are `me` or public `@usernames`; use only intended chats. Phone numbers and numeric IDs are intentionally unsupported. Usernames can change owners, so keep the list current. Case-insensitive duplicate usernames with identical messages are collapsed; conflicting messages are rejected. Maximum: 20 recipients, with a 10-second delay between sends. Messages are plain text with link previews off.
 
 In **Settings → Secrets and variables → Actions → Secrets**, create:
 
@@ -33,11 +33,11 @@ In **Settings → Secrets and variables → Actions → Secrets**, create:
 | `TELEGRAM_API_ID` | Your API ID |
 | `TELEGRAM_API_HASH` | Your API hash |
 | `TELEGRAM_SESSION` | Entire contents of `session-secret.txt` |
-| `TELEGRAM_RECIPIENTS` | JSON list, e.g. `["@alice", "@bobbb"]` |
+| `TELEGRAM_RECIPIENTS` (optional) | JSON object mapping usernames to messages; overrides `config.json` |
 
 Delete `session-secret.txt` after saving its value in GitHub. Never commit API credentials, phone numbers, login codes, 2FA passwords, or sessions. GitHub needs neither your phone number nor your 2FA password. To revoke this session, terminate its device under **Telegram Settings → Devices**; generate a replacement locally if needed.
 
-For private local configuration, copy `config.json` to the ignored `config.local.json` and use `python check_in.py --config config.local.json`. `TELEGRAM_RECIPIENTS`, when present, overrides the file's recipient list. In Actions, a missing recipient secret defaults to Saved Messages, regardless of the file's list.
+For private local configuration, copy `config.json` to the ignored `config.local.json` and use `python check_in.py --config config.local.json`. `TELEGRAM_RECIPIENTS`, when present, overrides the file’s recipient mapping. If missing or empty, Actions uses `config.json`. The six requested recipients and commands are already configured; only the three API/session secrets are required.
 
 ## Validate, then enable
 

@@ -1,4 +1,10 @@
 {
-  "message": "check in",
-  "recipients": ["me"]
+  "recipients": {
+    "@Xiaohaige_SGKbot": "/qd",
+    "@szskcx_bot": "/qd",
+    "@nb3344bot": "/qd",
+    "@weihaosgk_bot": "/qd",
+    "@QingBaoZhuQuebot": "/sign",
+    "@jrsgk": "/checkin"
+  }
 }

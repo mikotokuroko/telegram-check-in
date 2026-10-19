@@ -17,30 +17,30 @@ from telethon.sessions import StringSession
 
 def configuration(path):
     data = json.loads(Path(path).read_text())
-    message = data.get("message")
     recipients = (
         json.loads(os.environ["TELEGRAM_RECIPIENTS"])
-        if ("TELEGRAM_RECIPIENTS" in os.environ)
+        if os.environ.get("TELEGRAM_RECIPIENTS")
         else data.get("recipients")
     )
-    if (
-        not isinstance(message, str)
-        or not message.strip()
-        or len(message.encode("utf-16-le")) // 2 > 4096
-    ):
-        raise ValueError("Message must contain 1–4096 UTF-16 code units.")
-    if not isinstance(recipients, list) or not 1 <= len(recipients) <= 20:
-        raise ValueError("Configure between 1 and 20 recipients.")
-    result = []
-    for recipient in recipients:
+    if not isinstance(recipients, dict) or not 1 <= len(recipients) <= 20:
+        raise ValueError("Configure a mapping of 1–20 recipients to messages.")
+    result = {}
+    for recipient, message in recipients.items():
+        if (
+            not isinstance(message, str)
+            or not message.strip()
+            or len(message.encode("utf-16-le")) // 2 > 4096
+        ):
+            raise ValueError("Message must contain 1–4096 UTF-16 code units.")
         if not isinstance(recipient, str) or not re.fullmatch(
             r"me|@[A-Za-z][A-Za-z0-9_]{4,31}", recipient
         ):
             raise ValueError("Recipients must be 'me' or @usernames.")
         recipient = recipient.lower()
-        if recipient not in result:
-            result.append(recipient)
-    return message, result
+        if recipient in result and result[recipient] != message:
+            raise ValueError("Conflicting messages for the same recipient.")
+        result[recipient] = message
+    return result
 
 
 async def with_flood_wait(operation):
@@ -54,27 +54,26 @@ async def with_flood_wait(operation):
         return await operation()
 
 
-async def deliver(client, message, recipients):
+async def deliver(client, recipients):
     # Resolve everything before sending so a bad username fails without partial sends.
     peers = []
-    for recipient in recipients:
-        peers.append(
-            await with_flood_wait(
-                lambda recipient=recipient: client.get_input_entity(recipient)
-            )
+    for recipient, message in recipients.items():
+        peer = await with_flood_wait(
+            lambda recipient=recipient: client.get_input_entity(recipient)
         )
-    for index, peer in enumerate(peers):
+        peers.append((peer, message))
+    for index, (peer, message) in enumerate(peers):
         if index:
             await asyncio.sleep(10)
         await with_flood_wait(
-            lambda peer=peer: client.send_message(
+            lambda peer=peer, message=message: client.send_message(
                 peer, message, parse_mode=None, link_preview=False
             )
         )
         print(f"Sent recipient {index + 1}/{len(peers)}.", flush=True)
 
 
-async def send(message, recipients):
+async def send(recipients):
     session = os.environ["TELEGRAM_SESSION"].strip()
     if not session:
         raise ValueError("Missing session.")
@@ -92,7 +91,7 @@ async def send(message, recipients):
             raise ValueError("Session expired; generate a new session locally.")
         if (await client.get_me()).bot:
             raise ValueError("A personal Telegram account is required.")
-        await deliver(client, message, recipients)
+        await deliver(client, recipients)
     finally:
         await client.disconnect()
 
@@ -137,9 +136,9 @@ def main():
         if args.setup:
             asyncio.run(setup())
         else:
-            message, recipients = configuration(args.config)
+            recipients = configuration(args.config)
             if args.send:
-                asyncio.run(send(message, recipients))
+                asyncio.run(send(recipients))
             else:
                 print(
                     f"Offline validation passed: {len(recipients)} recipient(s). Nothing sent."

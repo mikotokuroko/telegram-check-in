@@ -14,15 +14,21 @@ import check_in
 class CheckInTest(unittest.TestCase):
     def test_configuration(self):
         with tempfile.NamedTemporaryFile(mode="w+") as config:
-            config.write('{"message":"hello","recipients":["me"]}')
+            config.write('{"recipients":{"me":"hello"}}')
             config.flush()
             with patch.dict(
-                os.environ, {"TELEGRAM_RECIPIENTS": '["@Alice", "@alice", "me"]'}
+                os.environ,
+                {
+                    "TELEGRAM_RECIPIENTS": '{"@Alice":"/qd", "@alice":"/qd", "me":"/sign"}'
+                },
             ):
                 self.assertEqual(
-                    check_in.configuration(config.name)[1], ["@alice", "me"]
+                    check_in.configuration(config.name),
+                    {"@alice": "/qd", "me": "/sign"},
                 )
-            with patch.dict(os.environ, {"TELEGRAM_RECIPIENTS": '["+61412345678"]'}):
+            with patch.dict(
+                os.environ, {"TELEGRAM_RECIPIENTS": '{"+61412345678":"hello"}'}
+            ):
                 with self.assertRaises(ValueError):
                     check_in.configuration(config.name)
 
@@ -36,11 +42,15 @@ class CheckInTest(unittest.TestCase):
                 None,
             ]
             with patch("check_in.asyncio.sleep", new_callable=AsyncMock) as sleep:
-                await check_in.deliver(client, "hello", ["me", "@alice"])
+                await check_in.deliver(client, {"me": "/qd", "@alice": "/sign"})
                 self.assertEqual(
                     [call.args[0] for call in sleep.call_args_list], [3, 10]
                 )
                 self.assertEqual(client.send_message.await_count, 3)
+                self.assertEqual(
+                    [call.args for call in client.send_message.call_args_list],
+                    [("first", "/qd"), ("first", "/qd"), ("second", "/sign")],
+                )
                 self.assertFalse(client.send_message.call_args.kwargs["link_preview"])
                 self.assertIsNone(client.send_message.call_args.kwargs["parse_mode"])
             for errors in (
@@ -59,7 +69,7 @@ class CheckInTest(unittest.TestCase):
                 ValueError("unknown recipient"),
             ]
             with self.assertRaises(ValueError):
-                await check_in.deliver(client, "hello", ["me", "@alice"])
+                await check_in.deliver(client, {"me": "/qd", "@alice": "/sign"})
             client.send_message.assert_not_awaited()
 
         asyncio.run(check())
