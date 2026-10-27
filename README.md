@@ -1,64 +1,165 @@
-# Telegram daily check-in
+# Telegram 每日自动签到
 
-Send a configured command to each recipient from your **personal Telegram account**, daily at **midnight (00:00) Australia/Melbourne**, using Telethon and GitHub Actions. No bot, Premium subscription, or always-on Mac. Sending starts disabled. Each recipient has its own message in `config.json`; `me` means your Saved Messages.
+**简体中文** | [English](README.en.md)
 
-## One-time local setup
+每天手动给机器人发签到指令，容易忘，也有点麻烦。这个小工具用你的 **Telegram 个人账号**，每天自动向指定聊天发送签到指令。不同机器人可以配置不同指令，一次设置，之后由 GitHub Actions 定时运行。
 
-Requires Python 3.12+. Run these commands from this project folder:
+默认时间：**每天墨尔本时间 00:00**（`Australia/Melbourne`，自动适配夏令时）。无需 Telegram Premium，也不用让电脑一直开机。
+
+## 功能介绍
+
+- **个人账号发送**：通过 Telethon 登录你的账号，不需要创建 Telegram Bot。
+- **分别配置指令**：每个接收方都可以设置自己的消息，例如 `/qd`、`/sign`、`/checkin`。
+- **每天自动运行**：GitHub Actions 负责定时启动，发送结束后退出。
+- **按顺序发送**：相邻两次发送间隔 10 秒，最多配置 20 个接收方。
+- **先检查，再启用**：默认命令只检查配置；新部署需要设置开关后才会发送。
+
+## 快速开始
+
+### 1. 准备项目
+
+将项目放到你自己的 **GitHub 私有仓库**，文件位于仓库根目录。记得保留隐藏目录 `.github` 和文件 `.gitignore`，定时任务在 `.github/workflows/daily.yml` 中。
+
+本地准备 Python 3.12 或更新版本，在项目目录执行：
 
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
+```
+
+### 2. 获取 Telegram API 信息
+
+打开 [my.telegram.org](https://my.telegram.org)，登录后进入 **API development tools**，创建应用，记下 `api_id` 和 `api_hash`。
+
+这两项用于连接 Telegram。不要写进代码，也不要提交到仓库。
+
+### 3. 生成登录会话
+
+在自己的电脑上执行：
+
+```sh
+python check_in.py --setup
+```
+
+按提示输入 API ID、API hash、带国家区号的手机号、Telegram 登录验证码，以及两步验证密码（如已开启）。输入时不会显示字符，正常输入后按回车即可。
+
+登录成功后，会生成 `session-secret.txt`。文件保存的是 **StringSession 登录会话**，后续任务可以复用它，不用每天输入验证码。这个步骤只登录，不发送消息。
+
+**会话相当于账号的登录凭证。** 不要发给别人、粘贴到聊天中，或上传到仓库。脚本会以仅当前用户可读写的权限创建文件，`.gitignore` 也已将它排除。
+
+### 4. 配置签到指令
+
+编辑 [config.json](config.json)，将用户名和对应指令写入 `recipients`：
+
+```json
+{
+  "recipients": {
+    "@alice": "/qd",
+    "@bobbb": "/sign",
+    "me": "/checkin"
+  }
+}
+```
+
+以上是格式示例，请换成你要使用的接收方。`me` 表示自己的“收藏夹”（Saved Messages）。当前项目已有配置，使用前核对即可。
+
+- 支持公开 `@用户名` 和 `me`，不支持手机号或数字 ID。
+- 用户名不区分大小写；相同用户名、相同消息会合并，消息冲突则报错。
+- 每条消息不能为空，长度上限为 4096 个 UTF-16 代码单元。
+- 消息按纯文本发送，不启用链接预览。
+- 用户名可能变更或转让，请及时更新配置。
+
+如果不想把接收方写进仓库，可以使用下方的 `TELEGRAM_RECIPIENTS` Secret 覆盖配置。本地也可复制一份为 `config.local.json`，再执行 `python check_in.py --config config.local.json`；这个文件已被 Git 忽略。
+
+### 5. 添加 GitHub Secrets
+
+进入仓库的 **Settings → Secrets and variables → Actions → Secrets**，点击 **New repository secret**，添加：
+
+| 名称 | 填写内容 | 是否必填 |
+| --- | --- | --- |
+| `TELEGRAM_API_ID` | Telegram API ID | 是 |
+| `TELEGRAM_API_HASH` | Telegram API hash | 是 |
+| `TELEGRAM_SESSION` | `session-secret.txt` 的完整内容 | 是 |
+| `TELEGRAM_RECIPIENTS` | 用户名与消息组成的 JSON 对象，如 `{"@alice":"/qd"}` | 否 |
+
+`TELEGRAM_RECIPIENTS` 非空时，会整体替换 `config.json` 中的接收方配置；未设置或为空时，使用文件中的配置。
+
+在 macOS 上，可以用下面的命令复制会话，不必在终端显示内容：
+
+```sh
+pbcopy < session-secret.txt
+```
+
+粘贴到 GitHub Secret 并保存后，删除本地 `session-secret.txt`。手机号、验证码和两步验证密码不需要上传到 GitHub；API 信息和会话也只能放在 Secrets 中，不能提交到代码里。
+
+### 6. 检查并开启自动签到
+
+先在本地检查：
+
+```sh
 python -m unittest -v
 python check_in.py
 ```
 
-The last two commands are offline and send nothing.
+这两条命令都不会连接 Telegram，也不会发送消息。
 
-1. Sign into [my.telegram.org](https://my.telegram.org) and open **API development tools** to create an application. Keep the `api_id` and `api_hash` private.
-2. Run `python check_in.py --setup` **on your own computer**. Enter your API ID/hash, phone number, Telegram login code, and 2FA password if requested. These prompts are hidden. This logs in but sends no messages.
-3. The resulting `session-secret.txt` contains a **StringSession**, not a SQLite session file. It is created with owner-only permissions and ignored by Git. Treat it as account access: anyone with it can act as you. Never paste it into chat, source code, workflow YAML, or logs.
+然后打开仓库的 **Actions → Daily Telegram check-in → Run workflow**，先不要勾选 **Send real messages**，运行一次配置检查。
 
-## Configure and upload
+检查通过后，进入 **Settings → Secrets and variables → Actions → Variables**，新建仓库变量：
 
-Create a private GitHub repository and upload this folder's contents to its root, including `.github/workflows/daily.yml` and `.gitignore`. Do not upload `.venv`, local configuration, or credential files. No credentials are included in this project. Review staged files before any commit.
-
-Edit the `recipients` object in `config.json` to map each username to its message, for example `{"@alice": "/qd", "@bobbb": "/sign"}`. Recipients are `me` or public `@usernames`; use only intended chats. Phone numbers and numeric IDs are intentionally unsupported. Usernames can change owners, so keep the list current. Case-insensitive duplicate usernames with identical messages are collapsed; conflicting messages are rejected. Maximum: 20 recipients, with a 10-second delay between sends. Messages are plain text with link previews off.
-
-In **Settings → Secrets and variables → Actions → Secrets**, create:
-
-| Repository secret | Value |
+| 名称 | 值 |
 | --- | --- |
-| `TELEGRAM_API_ID` | Your API ID |
-| `TELEGRAM_API_HASH` | Your API hash |
-| `TELEGRAM_SESSION` | Entire contents of `session-secret.txt` |
-| `TELEGRAM_RECIPIENTS` (optional) | JSON object mapping usernames to messages; overrides `config.json` |
+| `CHECK_IN_ENABLED` | `true` |
 
-Delete `session-secret.txt` after saving its value in GitHub. Never commit API credentials, phone numbers, login codes, 2FA passwords, or sessions. GitHub needs neither your phone number nor your 2FA password. To revoke this session, terminate its device under **Telegram Settings → Devices**; generate a replacement locally if needed.
+设置后，下一次定时任务就会发送。需要立即测试时，再手动运行工作流，并勾选 **Send real messages**；只有开关为 `true` 且勾选发送时，手动运行才会发消息。
 
-For private local configuration, copy `config.json` to the ignored `config.local.json` and use `python check_in.py --config config.local.json`. `TELEGRAM_RECIPIENTS`, when present, overrides the file’s recipient mapping. If missing or empty, Actions uses `config.json`. The six requested recipients and commands are already configured; only the three API/session secrets are required.
+## 修改签到时间
 
-## Validate, then enable
+编辑 [.github/workflows/daily.yml](.github/workflows/daily.yml) 中的：
 
-1. Open **Actions → Daily Telegram check-in → Run workflow**. Leave **Send real messages** unchecked. This installs dependencies, runs offline tests, and validates configuration without logging in.
-2. When ready to authorize real daily sends, add the repository **variable** `CHECK_IN_ENABLED` with the exact value `true`. The next scheduled run will send. A manual run sends only when both this variable and the **Send real messages** checkbox are enabled.
-3. To stop, change that variable to `false` or disable the workflow. Cancel an already-running job separately.
+```yaml
+schedule:
+  - cron: '0 0 * * *'
+    timezone: Australia/Melbourne
+```
 
-For a deliberately authorized local send, provide `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, and `TELEGRAM_SESSION` in your process environment through a secure mechanism, then run `python check_in.py --send`. Avoid entering secret values as shell command arguments or storing them in shell history.
+当前配置为每天墨尔本时间 00:00。修改 `cron` 即可调整时间；时区设置会自动处理夏令时。
 
-## Timing and failure behavior
+GitHub 定时任务可能延迟，繁忙时也可能漏跑，**不保证准点到秒**。工作流必须放在默认分支。公开仓库连续 60 天没有活动时，定时任务可能被自动停用；私有仓库不受这一闲置规则影响。运行费用取决于你的 GitHub Actions 额度和计费设置。
 
-The workflow uses GitHub's native `timezone: Australia/Melbourne`, so daylight saving changes require no edits. Change `0 0 * * *` to choose a different local time. Midnight avoids Melbourne’s repeated/skipped hours around DST changes. GitHub may delay midnight runs during high load; this is a target time, not an exact delivery guarantee.
+## 常见问题
 
-GitHub schedules are best effort: runs may be delayed or dropped. The workflow must be on the default branch. Public repositories' schedules may be disabled after 60 days without repository activity; a private repository avoids that inactivity rule. Hosted runner usage is subject to your account's Actions quota/billing. This small job normally consumes little time but is not an unconditional free-service guarantee.
+### 怎么暂停？
 
-Recipients are resolved before any message is sent. A Telegram FloodWait of at most 60 seconds is waited out and retried once; longer or repeated waits fail the run. Other errors stop immediately. Logs report counts and error types, never message text, recipients, or credentials.
+把仓库变量 `CHECK_IN_ENABLED` 改为 `false`，或在 Actions 页面停用工作流。已经开始运行的任务需要单独取消。
 
-**There is no exactly-once delivery guarantee.** A failure after some sends leaves partial delivery; a connection failure can leave delivery uncertain. Inspect Telegram before trying again. GitHub re-runs skip the sending step, and concurrent workflow runs are serialized, but a new manual dispatch can still duplicate today's message. No automatic catch-up or whole-job retry is included. Enable GitHub Actions failure notifications and inspect failures; expired/revoked sessions need local setup again.
+### 显示发送成功，就代表签到成功了吗？
 
-## Sources
+不一定。发送成功表示 Telegram 接受了消息；机器人是否签到成功、是否发放奖励，要以聊天中的回复为准。脚本不会读取或判断机器人回复。
 
-- [GitHub scheduled workflows and timezone support](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
-- [Telethon StringSession and session security](https://docs.telethon.dev/en/stable/concepts/sessions.html)
-- [Telethon FloodWait handling](https://docs.telethon.dev/en/stable/quick-references/faq.html#how-can-i-except-floodwaiterror)
+### 发送失败会自动重试吗？
+
+脚本会先解析全部接收方，再开始发送。如果 Telegram 返回不超过 60 秒的 FloodWait，会等待后重试一次；等待时间过长、再次限流或遇到其他错误时，会停止本次任务。
+
+失败前可能已有部分消息发出，网络中断也可能导致发送结果不确定。**重试前先检查聊天记录**，避免重复发送。GitHub 的“重新运行”会跳过发送步骤，但新建一次手动运行仍可能重复发送当天的指令。脚本没有自动补签，也不保证每条消息恰好发送一次。
+
+### 登录会话失效怎么办？
+
+在本地重新运行 `python check_in.py --setup`，生成新会话，再更新 `TELEGRAM_SESSION`。如果旧的 `session-secret.txt` 仍在，需要先移走或删除它。若要撤销会话，可在 Telegram 的 **设置 → 设备** 中终止对应登录。
+
+### 能在本地直接发送吗？
+
+可以。通过安全方式设置 `TELEGRAM_API_ID`、`TELEGRAM_API_HASH` 和 `TELEGRAM_SESSION` 环境变量后，执行：
+
+```sh
+python check_in.py --send
+```
+
+这条命令会真实发送消息。不要把凭证直接写进命令参数或 Shell 历史记录。
+
+## 相关文档
+
+- [GitHub Actions 定时任务](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
+- [Telethon 登录会话](https://docs.telethon.dev/en/stable/concepts/sessions.html)
+- [Telethon FloodWait 处理](https://docs.telethon.dev/en/stable/quick-references/faq.html#how-can-i-except-floodwaiterror)
